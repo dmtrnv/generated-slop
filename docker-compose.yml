@@ -1,0 +1,51 @@
+services:
+  order-source:
+    build:
+      context: .
+      dockerfile: OrderSource/Dockerfile
+    container_name: order-source
+    ports:
+      - "5001:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    networks:
+      - sources-net
+    restart: unless-stopped
+
+  abonent-source:
+    build:
+      context: .
+      dockerfile: AbonentSource/Dockerfile
+    container_name: abonent-source
+    ports:
+      - "5002:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    networks:
+      - sources-net
+    restart: unless-stopped
+
+  adapter-facade:
+    build:
+      context: .
+      dockerfile: AdapterFacade/Dockerfile
+    container_name: adapter-facade
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - AbonentClient__Address=http://abonent-source:8080
+      - OrderClient__Address=http://order-source:8080
+    depends_on:
+      - order-source
+      - abonent-source
+    networks:
+      - sources-net
+    restart: unless-stopped
+
+networks:
+  sources-net:
+    driver: bridge

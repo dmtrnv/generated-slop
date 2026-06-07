@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+option csharp_namespace = "OrderSource";
+
+package order;
+
+// The order service definition.
+service OrderService {
+  // Receives a phone number and streams matching orders with customer info.
+  rpc GetOrdersByPhone (PhoneRequest) returns (stream OrderInfo);
+}
+
+// The request message containing the customer's phone number.
+message PhoneRequest {
+  string phone_number = 1;
+}
+
+// The response message containing order and customer information.
+message OrderInfo {
+  // Order identifier.
+  string order_id = 1;
+  // Customer phone number.
+  string phone_number = 2;
+  // Product name.
+  string product_name = 3;
+  // Order total amount.
+  double amount = 4;
+}

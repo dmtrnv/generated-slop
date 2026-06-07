@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+option csharp_namespace = "QuerySource";
+
+package query;
+
+// The query service definition.
+service QueryService {
+  // Executes a single query and streams back matching result chunks.
+  rpc ExecuteQuery (QueryRequest) returns (stream QueryResponse);
+}
+
+// The request message containing the query, variables and source identifier.
+message QueryRequest {
+  // Query string (e.g. GraphQL-like query).
+  string query = 1;
+  // Query variables serialized as a string (e.g. JSON).
+  string variables = 2;
+  // Source identifier used to route the query to a specific data source.
+  string source_id = 3;
+}
+
+// The response message streamed back to the client.
+message QueryResponse {
+  // Result schema describing the structure of the data (e.g. JSON schema).
+  string result_schema = 1;
+  // Result data payload (e.g. JSON string).
+  string data = 2;
+}

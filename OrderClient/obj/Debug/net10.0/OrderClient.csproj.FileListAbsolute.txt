@@ -1,0 +1,15 @@
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\bin\Debug\net10.0\OrderClient.deps.json
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\bin\Debug\net10.0\OrderClient.dll
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\bin\Debug\net10.0\OrderClient.pdb
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\bin\Debug\net10.0\Protos.dll
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\bin\Debug\net10.0\Protos.pdb
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\obj\Debug\net10.0\OrderClient.csproj.AssemblyReference.cache
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\obj\Debug\net10.0\OrderClient.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\obj\Debug\net10.0\OrderClient.AssemblyInfoInputs.cache
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\obj\Debug\net10.0\OrderClient.AssemblyInfo.cs
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\obj\Debug\net10.0\OrderClient.csproj.CoreCompileInputs.cache
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\obj\Debug\net10.0\OrderCli.CDF040C1.Up2Date
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\obj\Debug\net10.0\OrderClient.dll
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\obj\Debug\net10.0\refint\OrderClient.dll
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\obj\Debug\net10.0\OrderClient.pdb
+C:\Users\renev\RiderProjects\WebApplication2\OrderClient\obj\Debug\net10.0\ref\OrderClient.dll

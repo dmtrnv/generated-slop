@@ -1,0 +1,12 @@
+C:\Users\renev\RiderProjects\WebApplication2\Protos\bin\Debug\net10.0\Protos.deps.json
+C:\Users\renev\RiderProjects\WebApplication2\Protos\bin\Debug\net10.0\Protos.dll
+C:\Users\renev\RiderProjects\WebApplication2\Protos\bin\Debug\net10.0\Protos.pdb
+C:\Users\renev\RiderProjects\WebApplication2\Protos\obj\Debug\net10.0\Protos.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\renev\RiderProjects\WebApplication2\Protos\obj\Debug\net10.0\Protos.AssemblyInfoInputs.cache
+C:\Users\renev\RiderProjects\WebApplication2\Protos\obj\Debug\net10.0\Protos.AssemblyInfo.cs
+C:\Users\renev\RiderProjects\WebApplication2\Protos\obj\Debug\net10.0\Protos.csproj.CoreCompileInputs.cache
+C:\Users\renev\RiderProjects\WebApplication2\Protos\obj\Debug\net10.0\Protos.dll
+C:\Users\renev\RiderProjects\WebApplication2\Protos\obj\Debug\net10.0\refint\Protos.dll
+C:\Users\renev\RiderProjects\WebApplication2\Protos\obj\Debug\net10.0\Protos.pdb
+C:\Users\renev\RiderProjects\WebApplication2\Protos\obj\Debug\net10.0\ref\Protos.dll
+C:\Users\renev\RiderProjects\WebApplication2\Protos\obj\Debug\net10.0\Protos.csproj.AssemblyReference.cache

@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+option csharp_namespace = "AbonentSource";
+
+package abonent;
+
+// The abonent service definition.
+service AbonentService {
+  // Receives a phone number and streams matching abonent information.
+  rpc GetAbonentsByPhone (PhoneRequest) returns (stream AbonentInfo);
+}
+
+// The request message containing the phone number to look up.
+message PhoneRequest {
+  string phone_number = 1;
+}
+
+// The response message containing abonent information.
+message AbonentInfo {
+  // Abonent identifier.
+  string abonent_id = 1;
+  // Abonent phone number.
+  string phone_number = 2;
+  // Abonent full name.
+  string name = 3;
+}

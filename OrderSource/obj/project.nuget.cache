@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "dgSpecHash": "ioexZpq81ig=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\renev\\RiderProjects\\WebApplication2\\OrderSource\\OrderSource.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\renev\\.nuget\\packages\\google.protobuf\\3.27.0\\google.protobuf.3.27.0.nupkg.sha512",
+    "C:\\Users\\renev\\.nuget\\packages\\grpc.aspnetcore\\2.64.0\\grpc.aspnetcore.2.64.0.nupkg.sha512",
+    "C:\\Users\\renev\\.nuget\\packages\\grpc.aspnetcore.server\\2.64.0\\grpc.aspnetcore.server.2.64.0.nupkg.sha512",
+    "C:\\Users\\renev\\.nuget\\packages\\grpc.aspnetcore.server.clientfactory\\2.64.0\\grpc.aspnetcore.server.clientfactory.2.64.0.nupkg.sha512",
+    "C:\\Users\\renev\\.nuget\\packages\\grpc.core.api\\2.64.0\\grpc.core.api.2.64.0.nupkg.sha512",
+    "C:\\Users\\renev\\.nuget\\packages\\grpc.net.client\\2.64.0\\grpc.net.client.2.64.0.nupkg.sha512",
+    "C:\\Users\\renev\\.nuget\\packages\\grpc.net.clientfactory\\2.64.0\\grpc.net.clientfactory.2.64.0.nupkg.sha512",
+    "C:\\Users\\renev\\.nuget\\packages\\grpc.net.common\\2.64.0\\grpc.net.common.2.64.0.nupkg.sha512",
+    "C:\\Users\\renev\\.nuget\\packages\\grpc.tools\\2.64.0\\grpc.tools.2.64.0.nupkg.sha512"
+  ],
+  "logs": []
+}

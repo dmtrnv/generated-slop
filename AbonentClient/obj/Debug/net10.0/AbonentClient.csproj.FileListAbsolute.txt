@@ -1,0 +1,15 @@
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\obj\Debug\net10.0\AbonentClient.csproj.AssemblyReference.cache
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\obj\Debug\net10.0\AbonentClient.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\obj\Debug\net10.0\AbonentClient.AssemblyInfoInputs.cache
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\obj\Debug\net10.0\AbonentClient.AssemblyInfo.cs
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\obj\Debug\net10.0\AbonentClient.csproj.CoreCompileInputs.cache
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\bin\Debug\net10.0\AbonentClient.deps.json
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\bin\Debug\net10.0\AbonentClient.dll
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\bin\Debug\net10.0\AbonentClient.pdb
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\bin\Debug\net10.0\Protos.dll
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\bin\Debug\net10.0\Protos.pdb
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\obj\Debug\net10.0\AbonentC.AA7FB598.Up2Date
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\obj\Debug\net10.0\AbonentClient.dll
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\obj\Debug\net10.0\refint\AbonentClient.dll
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\obj\Debug\net10.0\AbonentClient.pdb
+C:\Users\renev\RiderProjects\WebApplication2\AbonentClient\obj\Debug\net10.0\ref\AbonentClient.dll

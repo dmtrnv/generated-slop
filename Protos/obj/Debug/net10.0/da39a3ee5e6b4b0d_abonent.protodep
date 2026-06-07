@@ -1,0 +1,2 @@
+obj\Debug\net10.0/Abonent.cs \
+obj\Debug\net10.0/AbonentGrpc.cs: abonent.proto
