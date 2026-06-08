@@ -280,6 +280,12 @@ public class OrderAdapter : IAdapter
                         "Resolving searhByPhoneNumber(phone_number: {Phone})",
                         phone);
 
+                    // GraphQL.NET 8's ExecutionStrategy.SetArrayItemNodesAsync
+                    // requires the resolver's Result to be a synchronous
+                    // IEnumerable (see ExecutionStrategy.cs:425). The streaming
+                    // gains for this adapter therefore come from the outer
+                    // pipeline (IServerStreamWriter<QueryResponse>), not from
+                    // the resolver itself. See plans/order-adapter-streaming-resolvers.md.
                     var results = new List<OrderDto>();
                     await foreach (var info in orderClient
                         .GetOrdersByPhoneAsync(phone, context.CancellationToken)
@@ -307,6 +313,9 @@ public class OrderAdapter : IAdapter
                         "Resolving findByOrderId(order_id: {OrderId})",
                         orderId);
 
+                    // See note in searhByPhoneNumber: GraphQL.NET 8 requires
+                    // IEnumerable at the resolver level, so the streaming wins
+                    // are on the outer IServerStreamWriter<QueryResponse> path.
                     var results = new List<OrderDto>();
                     await foreach (var info in orderClient
                         .GetOrdersByOrderIdAsync(orderId, context.CancellationToken)
