@@ -12,7 +12,7 @@ builder.Services.AddGrpcReflection();
 builder.Services.AddAbonentClient(builder.Configuration, "AbonentClient");
 builder.Services.AddOrderClient(builder.Configuration, "OrderClient");
 
-builder.Services.AddKeyedScoped<IAdapter, AbonentAdapter>(AbonentAdapter.SourceId);
+// builder.Services.AddKeyedScoped<IAdapter, AbonentAdapter>(AbonentAdapter.SourceId);
 builder.Services.AddKeyedScoped<IAdapter, OrderAdapter>(OrderAdapter.SourceId);
 
 var app = builder.Build();
