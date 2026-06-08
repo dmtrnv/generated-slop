@@ -8,11 +8,18 @@ package order;
 service OrderService {
   // Receives a phone number and streams matching orders with customer info.
   rpc GetOrdersByPhone (PhoneRequest) returns (stream OrderInfo);
+  // Receives an order id and streams the matching order with customer info.
+  rpc GetOrdersByOrderId (OrderIdRequest) returns (stream OrderInfo);
 }
 
 // The request message containing the customer's phone number.
 message PhoneRequest {
   string phone_number = 1;
+}
+
+// The request message containing the order identifier.
+message OrderIdRequest {
+  string order_id = 1;
 }
 
 // The response message containing order and customer information.

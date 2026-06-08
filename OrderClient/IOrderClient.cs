@@ -26,4 +26,15 @@ public interface IOrderClient
     Task<IReadOnlyList<OrderInfo>> GetOrdersByPhoneListAsync(
         string phoneNumber,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Streams all orders whose order identifier matches <paramref name="orderId"/>.
+    /// Honors the cancellation token for cooperative shutdown.
+    /// </summary>
+    /// <param name="orderId">Order identifier to look up.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>An async sequence of <see cref="OrderInfo"/> messages.</returns>
+    IAsyncEnumerable<OrderInfo> GetOrdersByOrderIdAsync(
+        string orderId,
+        CancellationToken cancellationToken = default);
 }

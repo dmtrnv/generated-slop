@@ -49,4 +49,39 @@ public class OrderInfoService(ILogger<OrderInfoService> logger) : OrderService.O
             await responseStream.WriteAsync(order);
         }
     }
+
+    public override async Task GetOrdersByOrderId(
+        OrderIdRequest request,
+        IServerStreamWriter<OrderInfo> responseStream,
+        ServerCallContext context)
+    {
+        logger.LogInformation("GetOrdersByOrderId called with order_id: {OrderId}", request.OrderId);
+
+        var matches = Orders
+            .Where(o => string.Equals(o.OrderId, request.OrderId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (matches.Count == 0)
+        {
+            logger.LogInformation("No orders found for order_id {OrderId}", request.OrderId);
+            return;
+        }
+
+        foreach (var order in matches)
+        {
+            // Emulate some processing time for streaming demonstration.
+            await Task.Delay(200, context.CancellationToken);
+
+            if (context.CancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+
+            logger.LogInformation(
+                "Streaming order {OrderId} (matched by order_id)",
+                order.OrderId);
+
+            await responseStream.WriteAsync(order);
+        }
+    }
 }

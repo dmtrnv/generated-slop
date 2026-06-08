@@ -75,20 +75,16 @@ public class QueryService(
                 new Status(StatusCode.InvalidArgument, $"Query validation failed: {message}"));
         }
 
-        // 4. Pull the requested phone numbers out of the coerced variables.
-        //    After successful validation GraphQL.NET has coerced the
-        //    dictionary into the types declared by the operation.
-        var phoneNumbers = ExtractPhoneNumbers(coercedVariables);
-        if (phoneNumbers.Count == 0)
-        {
-            logger.LogWarning(
-                "No phone numbers resolved from query variables for source {SourceId}; nothing to stream",
-                request.SourceId);
-            return;
-        }
+        // 4. Hand the validated operation over to the adapter. The adapter is
+        //    now responsible for dispatching to the correct root field resolver
+        //    and for applying the operation's selection set.
+        var adapterQuery = new AdapterQuery(
+            Query: request.Query,
+            OperationName: string.IsNullOrWhiteSpace(request.OperationName) ? null : request.OperationName,
+            VariablesJson: request.Variables,
+            Variables: coercedVariables);
 
-        // 5. Delegate the actual data fetch / streaming to the resolved adapter.
-        await adapter.Find(phoneNumbers, responseStream, context);
+        await adapter.Find(adapterQuery, responseStream, context);
     }
 
     /// <summary>
@@ -149,37 +145,19 @@ public class QueryService(
 
         try
         {
-            return JsonSerializer.Deserialize<Dictionary<string, object?>>(variables, JsonOptions)
+            var result = JsonSerializer.Deserialize<Dictionary<string, object?>>(variables, JsonOptions)
                 ?? new Dictionary<string, object?>();
+            foreach (var pair in result)
+            {
+                result[pair.Key] = pair.Value?.ToString();
+            }
+
+            return result;
         }
         catch (JsonException ex)
         {
             throw new RpcException(
                 new Status(StatusCode.InvalidArgument, $"Invalid variables JSON: {ex.Message}"));
         }
-    }
-
-    /// <summary>
-    /// Extracts the phone numbers from the coerced query variables produced
-    /// by GraphQL.NET. Supports either <c>phone_numbers</c> (list) or
-    /// <c>phone_number</c> (single string) variable names, mirroring the
-    /// field names declared in the adapter schemas.
-    /// </summary>
-    private static List<string> ExtractPhoneNumbers(Inputs variables)
-    {
-        if (variables.TryGetValue("phone_numbers", out var list) && list is IEnumerable<object?> many)
-        {
-            return many
-                .Where(v => v is string s && !string.IsNullOrWhiteSpace(s))
-                .Select(v => (string)v!)
-                .ToList();
-        }
-
-        if (variables.TryGetValue("phone_number", out var single) && !string.IsNullOrWhiteSpace(single.ToString()))
-        {
-            return [single.ToString()];
-        }
-
-        return [];
     }
 }

@@ -6,14 +6,16 @@ namespace AdapterFacade.Services;
 public interface IAdapter
 {
     /// <summary>
-    /// Find data in bounded data source
+    /// Executes the supplied GraphQL operation against the adapter's data
+    /// source and streams the selection-set-projected results back to the
+    /// caller. The adapter is responsible for dispatching to the correct
+    /// root-field resolver and for honoring the operation's selection set.
     /// </summary>
-    /// <param name="phoneNumbers">Phone numbers to search by</param>
-    /// <param name="responseStream">Response stream</param>
-    /// <param name="context">Call context</param>
-    /// <returns>Streaming found data</returns>
+    /// <param name="query">Carrier holding the query text, operation name, and (coerced) variables.</param>
+    /// <param name="responseStream">Response stream.</param>
+    /// <param name="context">Call context.</param>
     Task Find(
-        IEnumerable<string> phoneNumbers,
+        AdapterQuery query,
         IServerStreamWriter<QueryResponse> responseStream,
         ServerCallContext context);
 

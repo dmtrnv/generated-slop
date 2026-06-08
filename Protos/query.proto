@@ -18,6 +18,8 @@ message QueryRequest {
   string variables = 2;
   // Source identifier used to route the query to a specific data source.
   string source_id = 3;
+  // Optional operation name when the query document contains multiple operations.
+  string operation_name = 4;
 }
 
 // The response message streamed back to the client.

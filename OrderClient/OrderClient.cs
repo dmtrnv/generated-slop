@@ -54,4 +54,24 @@ public sealed class OrderClient : IOrderClient
         }
         return result;
     }
+
+    public async IAsyncEnumerable<OrderInfo> GetOrdersByOrderIdAsync(
+        string orderId,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(orderId))
+        {
+            throw new ArgumentException("Order id must be provided.", nameof(orderId));
+        }
+
+        _logger.LogInformation("Requesting orders for order_id {OrderId}", orderId);
+
+        var request = new OrderIdRequest { OrderId = orderId };
+        var call = _client.GetOrdersByOrderId(request, cancellationToken: cancellationToken);
+
+        await foreach (var info in call.ResponseStream.ReadAllAsync(cancellationToken))
+        {
+            yield return info;
+        }
+    }
 }
