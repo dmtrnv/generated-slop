@@ -1,7 +1,8 @@
-using System.Text.Json;
+using GraphQL.Types;
+using GraphQLParser.AST;
+using Grpc.Core;
 using AbonentClient;
 using AbonentSource;
-using Grpc.Core;
 using QuerySource;
 
 namespace AdapterFacade.Services;
@@ -9,6 +10,11 @@ namespace AdapterFacade.Services;
 public class AbonentAdapter : IAdapter
 {
     public static string SourceId { get; } = "abonent_adapter_source_id";
+
+    // The entity's field types are defined exclusively in Schema();
+    // this only identifies the type by name.
+    private static readonly EntityTypeDefinition AbonentType = new(
+        graphqlTypeName: "Abonent");
 
     private readonly IAbonentClient _abonentClient;
     private readonly ILogger<AbonentAdapter> _logger;
@@ -21,14 +27,30 @@ public class AbonentAdapter : IAdapter
 
     public async Task Find(
         IEnumerable<string> phoneNumbers,
+        IReadOnlyList<GraphQLField> selectionSet,
+        IReadOnlyList<AppliedDirective> directives,
         IServerStreamWriter<QueryResponse> responseStream,
         ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(phoneNumbers);
+        ArgumentNullException.ThrowIfNull(selectionSet);
+        ArgumentNullException.ThrowIfNull(directives);
         ArgumentNullException.ThrowIfNull(responseStream);
         ArgumentNullException.ThrowIfNull(context);
 
-        var schema = Schema();
+        // Directives from the top-level selection are forwarded as-is.
+        if (directives.Count > 0)
+        {
+            _logger.LogInformation(
+                "AbonentAdapter received {DirectiveCount} directive(s) on searhByPhoneNumber: {Directives}",
+                directives.Count,
+                string.Join(", ", directives.Select(d => d.Name)));
+        }
+
+        var schema = SelectionSetSerializer.RewriteSchema(
+            Schema(),
+            AbonentType,
+            selectionSet);
 
         foreach (var phoneNumber in phoneNumbers)
         {
@@ -56,7 +78,10 @@ public class AbonentAdapter : IAdapter
                         break;
                     }
 
-                    var data = SerializeAbonent(abonent);
+                    var data = SelectionSetSerializer.Serialize(
+                        selectionSet,
+                        abonent,
+                        ResolveAbonentField);
 
                     _logger.LogInformation(
                         "Streaming abonent {AbonentId} ({Name}) for phone {Phone}",
@@ -89,8 +114,9 @@ public class AbonentAdapter : IAdapter
 
     public string Schema()
     {
-        // GraphQL SDL describing the Abonent entity produced by this adapter.
-        // Mirrors the fields declared in Protos/abonent.proto (AbonentInfo):
+        // GraphQL SDL describing the Abonent entity produced by this
+        // adapter. Mirrors the fields declared in Protos/abonent.proto
+        // (AbonentInfo):
         //   - abonent_id   (string)
         //   - phone_number (string)
         //   - name         (string)
@@ -107,15 +133,17 @@ public class AbonentAdapter : IAdapter
         """;
     }
 
-    private static string SerializeAbonent(AbonentInfo abonent)
+    /// <summary>
+    /// Returns the value of the named field on the given
+    /// <see cref="AbonentInfo"/>, or <c>null</c> when the field is not
+    /// part of the Abonent entity (in which case the serializer omits
+    /// it from the payload).
+    /// </summary>
+    private static object? ResolveAbonentField(AbonentInfo abonent, string fieldName) => fieldName switch
     {
-        var payload = new
-        {
-            abonent_id = abonent.AbonentId,
-            phone_number = abonent.PhoneNumber,
-            name = abonent.Name,
-        };
-
-        return JsonSerializer.Serialize(payload);
-    }
+        "abonent_id" => abonent.AbonentId,
+        "phone_number" => abonent.PhoneNumber,
+        "name" => abonent.Name,
+        _ => null,
+    };
 }

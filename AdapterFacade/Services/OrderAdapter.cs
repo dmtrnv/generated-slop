@@ -1,4 +1,5 @@
-using System.Text.Json;
+using GraphQL.Types;
+using GraphQLParser.AST;
 using Grpc.Core;
 using OrderClient;
 using OrderSource;
@@ -9,6 +10,11 @@ namespace AdapterFacade.Services;
 public class OrderAdapter : IAdapter
 {
     public static string SourceId { get; } = "order_adapter_source_id";
+
+    // The entity's field types are defined exclusively in Schema();
+    // this only identifies the type by name.
+    private static readonly EntityTypeDefinition OrderType = new(
+        graphqlTypeName: "Order");
 
     private readonly IOrderClient _orderClient;
     private readonly ILogger<OrderAdapter> _logger;
@@ -21,14 +27,37 @@ public class OrderAdapter : IAdapter
 
     public async Task Find(
         IEnumerable<string> phoneNumbers,
+        IReadOnlyList<GraphQLField> selectionSet,
+        IReadOnlyList<AppliedDirective> directives,
         IServerStreamWriter<QueryResponse> responseStream,
         ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(phoneNumbers);
+        ArgumentNullException.ThrowIfNull(selectionSet);
+        ArgumentNullException.ThrowIfNull(directives);
         ArgumentNullException.ThrowIfNull(responseStream);
         ArgumentNullException.ThrowIfNull(context);
 
-        var schema = Schema();
+        // Directives from the top-level selection are forwarded as-is. We
+        // do not interpret them here - adapters downstream may inspect
+        // the list to alter behavior (caching, authorization, etc.).
+        if (directives.Count > 0)
+        {
+            _logger.LogInformation(
+                "OrderAdapter received {DirectiveCount} directive(s) on searhByPhoneNumber: {Directives}",
+                directives.Count,
+                string.Join(", ", directives.Select(d => d.Name)));
+        }
+
+        // The schema is derived from the selection set so that the
+        // streamed response declares exactly the fields the client asked
+        // for, in the order it asked for them. We rewrite the adapter's
+        // existing SDL in place (preserving the Query type and any
+        // surrounding whitespace) rather than synthesizing a new one.
+        var schema = SelectionSetSerializer.RewriteSchema(
+            Schema(),
+            OrderType,
+            selectionSet);
 
         foreach (var phoneNumber in phoneNumbers)
         {
@@ -56,7 +85,10 @@ public class OrderAdapter : IAdapter
                         break;
                     }
 
-                    var data = SerializeOrder(order);
+                    var data = SelectionSetSerializer.Serialize(
+                        selectionSet,
+                        order,
+                        ResolveOrderField);
 
                     _logger.LogInformation(
                         "Streaming order {OrderId} ({ProductName}) for phone {Phone}",
@@ -89,8 +121,9 @@ public class OrderAdapter : IAdapter
 
     public string Schema()
     {
-        // GraphQL SDL describing the Order entity produced by this adapter.
-        // Mirrors the fields declared in Protos/order.proto (OrderInfo):
+        // Full GraphQL SDL describing the Order entity produced by this
+        // adapter. Mirrors the fields declared in Protos/order.proto
+        // (OrderInfo):
         //   - order_id     (string)
         //   - phone_number (string)
         //   - product_name (string)
@@ -109,16 +142,18 @@ public class OrderAdapter : IAdapter
         """;
     }
 
-    private static string SerializeOrder(OrderInfo order)
+    /// <summary>
+    /// Returns the value of the named field on the given
+    /// <see cref="OrderInfo"/>, or <c>null</c> when the field is not
+    /// part of the Order entity (in which case the serializer omits it
+    /// from the payload).
+    /// </summary>
+    private static object? ResolveOrderField(OrderInfo order, string fieldName) => fieldName switch
     {
-        var payload = new
-        {
-            order_id = order.OrderId,
-            phone_number = order.PhoneNumber,
-            product_name = order.ProductName,
-            amount = order.Amount,
-        };
-
-        return JsonSerializer.Serialize(payload);
-    }
+        "order_id" => order.OrderId,
+        "phone_number" => order.PhoneNumber,
+        "product_name" => order.ProductName,
+        "amount" => order.Amount,
+        _ => null,
+    };
 }

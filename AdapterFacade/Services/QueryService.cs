@@ -2,6 +2,7 @@ using System.Text.Json;
 using GraphQL;
 using GraphQL.Types;
 using GraphQL.Validation;
+using GraphQLParser.AST;
 using Grpc.Core;
 using Microsoft.Extensions.DependencyInjection;
 using QuerySource;
@@ -87,8 +88,14 @@ public class QueryService(
             return;
         }
 
-        // 5. Delegate the actual data fetch / streaming to the resolved adapter.
-        await adapter.Find(phoneNumbers, responseStream, context);
+        // 5. Extract the selection set of the top-level query field and the
+        //    directives applied to it. These are forwarded to the adapter
+        //    so it can shape the streamed schema and the resulting data
+        //    payload to match what the client actually asked for.
+        var (selectionSet, directives) = ExtractTopLevelSelection(document);
+
+        // 6. Delegate the actual data fetch / streaming to the resolved adapter.
+        await adapter.Find(phoneNumbers, selectionSet, directives, responseStream, context);
     }
 
     /// <summary>
@@ -121,7 +128,7 @@ public class QueryService(
     /// <see cref="RpcException"/> with <see cref="StatusCode.InvalidArgument"/>
     /// if the query has syntax errors.
     /// </summary>
-    private static GraphQLParser.AST.GraphQLDocument ParseQuery(string query)
+    private static GraphQLDocument ParseQuery(string query)
     {
         try
         {
@@ -169,17 +176,109 @@ public class QueryService(
     {
         if (variables.TryGetValue("phone_numbers", out var list) && list is IEnumerable<object?> many)
         {
-            return many
-                .Where(v => v is string s && !string.IsNullOrWhiteSpace(s))
-                .Select(v => (string)v!)
-                .ToList();
+            var result = new List<string>();
+            foreach (var v in many)
+            {
+                if (v is string s && !string.IsNullOrWhiteSpace(s))
+                {
+                    result.Add(s);
+                }
+            }
+            return result;
         }
 
-        if (variables.TryGetValue("phone_number", out var single) && !string.IsNullOrWhiteSpace(single.ToString()))
+        if (variables.TryGetValue("phone_number", out var single)
+            && single is not null
+            && !string.IsNullOrWhiteSpace(single.ToString()))
         {
-            return [single.ToString()];
+            var value = single.ToString();
+            if (value is not null)
+            {
+                return [value];
+            }
         }
 
         return [];
+    }
+
+    /// <summary>
+    /// Walks the parsed GraphQL document and returns:
+    ///   - the list of fields selected inside the first list-typed
+    ///     selection of the top-level query field (e.g. the inner
+    ///     fields of <c>searhByPhoneNumber { ... }</c>), in document
+    ///     order; and
+    ///   - the <see cref="AppliedDirective"/>s applied to that same
+    ///     top-level field, in document order.
+    ///
+    /// If no list-typed selection is present, the inner selection list
+    /// is empty and the directives are taken from the first field in
+    /// the document.
+    /// </summary>
+    private static (IReadOnlyList<GraphQLField> SelectionSet, IReadOnlyList<AppliedDirective> Directives)
+        ExtractTopLevelSelection(GraphQLDocument document)
+    {
+        var operation = document.Definitions.OfType<GraphQLOperationDefinition>().FirstOrDefault();
+        if (operation is null)
+        {
+            return (Array.Empty<GraphQLField>(), Array.Empty<AppliedDirective>());
+        }
+
+        var topLevelField = operation.SelectionSet.Selections.OfType<GraphQLField>().FirstOrDefault();
+        if (topLevelField is null)
+        {
+            return (Array.Empty<GraphQLField>(), Array.Empty<AppliedDirective>());
+        }
+
+        var directives = ToAppliedDirectives(topLevelField.Directives);
+
+        // The data streamed back by adapters is shaped like the inner
+        // fields of the list-returning field (e.g. Order / Abonent),
+        // so we surface that selection set - in document order.
+        var innerField = topLevelField.SelectionSet?.Selections.OfType<GraphQLField>().FirstOrDefault();
+        if (innerField is null || innerField.SelectionSet is null)
+        {
+            return (Array.Empty<GraphQLField>(), directives);
+        }
+
+        var fields = new List<GraphQLField>(innerField.SelectionSet.Selections.Count);
+        foreach (var selection in innerField.SelectionSet.Selections)
+        {
+            if (selection is GraphQLField field)
+            {
+                fields.Add(field);
+            }
+        }
+        return (fields, directives);
+    }
+
+    /// <summary>
+    /// Converts the directives from a GraphQLParser AST node into
+    /// GraphQL.NET <see cref="AppliedDirective"/> instances, preserving
+    /// the order in which they were written in the document.
+    /// </summary>
+    private static IReadOnlyList<AppliedDirective> ToAppliedDirectives(GraphQLDirectives? directives)
+    {
+        if (directives is null || directives.Count == 0)
+        {
+            return Array.Empty<AppliedDirective>();
+        }
+
+        var result = new List<AppliedDirective>(directives.Count);
+        foreach (var directive in directives.Items)
+        {
+            var applied = new AppliedDirective(directive.Name.StringValue);
+            if (directive.Arguments is { Count: > 0 } args)
+            {
+                foreach (var arg in args.Items)
+                {
+                    applied.AddArgument(new DirectiveArgument(arg.Name.StringValue)
+                    {
+                        Value = arg.Value.ToString(),
+                    });
+                }
+            }
+            result.Add(applied);
+        }
+        return result;
     }
 }
