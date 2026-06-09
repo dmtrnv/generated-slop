@@ -49,10 +49,14 @@ public class QueryService(
                 new Status(StatusCode.NotFound, $"No adapter registered for source_id '{request.SourceId}'"));
         }
 
-        // 2. Build a schema-first GraphQL schema from the SDL exposed by the
-        //    adapter. We use GraphQL.NET for both query validation against
-        //    this schema and for coercing the supplied variables.
-        var schema = BuildSchema(adapter.Schema(), request.SourceId);
+        // 2. Use the adapter's code-first ISchema instance directly. We must
+        //    NOT re-parse the adapter's printed SDL with Schema.For(...) —
+        //    the SDL round-trip drops runtime configuration such as
+        //    subscription StreamResolvers, which then fail validation with
+        //    "must have StreamResolver set". The adapter owns the schema
+        //    (including all resolvers); QueryService is a validator and
+        //    dispatcher, not a schema author.
+        var schema = adapter.GraphQLSchema;
         var document = ParseQuery(request.Query);
 
         // 3. Parse the JSON variables string into a dictionary so GraphQL.NET
@@ -85,31 +89,6 @@ public class QueryService(
             Variables: coercedVariables);
 
         await adapter.Find(adapterQuery, responseStream, context);
-    }
-
-    /// <summary>
-    /// Builds a GraphQL.NET schema from the SDL string returned by an adapter
-    /// using the schema-first (string-based) approach.
-    /// </summary>
-    private static Schema BuildSchema(string sdl, string sourceId)
-    {
-        if (string.IsNullOrWhiteSpace(sdl))
-        {
-            throw new RpcException(
-                new Status(StatusCode.Internal, $"Adapter for source_id '{sourceId}' returned an empty schema"));
-        }
-
-        try
-        {
-            return Schema.For(sdl);
-        }
-        catch (Exception ex)
-        {
-            throw new RpcException(
-                new Status(
-                    StatusCode.Internal,
-                    $"Failed to build schema for source_id '{sourceId}': {ex.Message}"));
-        }
     }
 
     /// <summary>

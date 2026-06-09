@@ -1,9 +1,47 @@
 # Plan: stream `OrderAdapter` resolvers (no in-memory list)
 
-## 1. Status: deferred — runtime blocker discovered
+## 1. Status: ✅ Plan C (GraphQL subscriptions) implemented
 
-The original plan (return `IAsyncEnumerable<OrderDto>` from the resolvers) **does not work**
-against `GraphQL 8.0.2`. Runtime evidence:
+The original Plan A attempt (return `IAsyncEnumerable<OrderDto>` from the resolvers)
+**does not work** against `GraphQL 8.0.2`'s `SerialExecutionStrategy` for the list-field
+path (see the historical runtime evidence captured below). To get true end-to-end
+streaming we have implemented **Plan C** from the options list in §4:
+
+- A new `Subscription` root type was added to the code-first schema in
+  [`AdapterFacade/Services/OrderAdapter.cs`](AdapterFacade/Services/OrderAdapter.cs)
+  with two fields — `searhByPhoneNumber(phone_number: String!): Order` and
+  `findByOrderId(order_id: String!): Order` — each wired with both a `FuncFieldResolver`
+  (trivial `default!` return; the `SubscriptionExecutionStrategy` does not call it) and
+  a `SourceStreamResolver` whose delegate returns an `IObservable<OrderDto>` produced
+  by the new `MapToDtosAsync` helper (one `OrderDto` per upstream `OrderInfo`) bridged
+  through the in-repo `AsyncEnumerableObservable` adapter (avoids the `System.Reactive`
+  dependency).
+- The DI container in [`AdapterFacade/Program.cs`](AdapterFacade/Program.cs) now
+  registers a singleton `SubscriptionExecutionStrategy` and a singleton
+  `IDocumentExecuter` constructed with a `DefaultExecutionStrategySelector` whose
+  `ExecutionStrategyRegistration`s map `OperationType.Query` / `OperationType.Mutation`
+  → `SerialExecutionStrategy` (unchanged) and `OperationType.Subscription` →
+  `SubscriptionExecutionStrategy`. The `DocumentExecuter` ctor takes
+  `(IDocumentBuilder, IDocumentValidator, IExecutionStrategySelector, IEnumerable<IConfigureExecution>)`
+  — the only public ctor that accepts a strategy selector in GraphQL 8.0.2.
+- The existing `Query` root still returns `[Order]` lists materialized from
+  `List<OrderDto>` (Plan A behaviour, unchanged) so the gRPC carrier contract is
+  preserved. Subscriptions are additive; the SDL printed by `OrderAdapter.Schema()`
+  now contains both root types.
+- `OrderAdapter` now takes the `IDocumentExecuter` from DI; the secondary
+  parameterless chained ctor was removed. The constructor signature is the one
+  `Microsoft.Extensions.DependencyInjection` resolves.
+- The gRPC carrier (`IServerStreamWriter<QueryResponse>`) is unchanged. For
+  subscription operations the adapter walks the single `RootExecutionNode` that
+  `SubscriptionExecutionStrategy` produces (per Plan C §C.6 risk 1, the strategy may
+  buffer the final `ExecutionResult` and emit one row per `OrderInfo` event).
+- Build: `dotnet build WebApplication2.sln` → **Build succeeded. 0 Warning(s), 0 Error(s).**
+- Smoke test: a throwaway probe in `AdapterFacade/bin/apiprobe/` (since deleted)
+  constructed `OrderAdapter` with stub `IOrderClient` / `IDocumentExecuter`
+  implementations, called `adapter.Schema()`, and confirmed the printed SDL contains
+  `type Subscription { searhByPhoneNumber(phone_number: String!): Order, findByOrderId(order_id: String!): Order }`.
+
+Historical runtime evidence (the original Plan A failure, preserved for context):
 
 ```
 GraphQL.Execution.UnhandledError: Error trying to resolve field 'searhByPhoneNumber'.
@@ -16,13 +54,10 @@ GraphQL.Execution.UnhandledError: Error trying to resolve field 'searhByPhoneNum
 ```
 
 `ExecutionStrategy.SetArrayItemNodesAsync` checks the field's `Result` and **requires a
-synchronous `IEnumerable`**. `IAsyncEnumerable<T>` resolvers are not supported on the
-list-field path in GraphQL.NET 8.0.2.
-
-The code change that introduced the error has been **reverted**: the two `OrderQuery`
-resolvers in [`AdapterFacade/Services/OrderAdapter.cs`](AdapterFacade/Services/OrderAdapter.cs)
-are back to materializing into `List<OrderDto>` and returning it, with a code comment
-pointing at this plan. The file builds cleanly (0 warnings, 0 errors).
+synchronous `IEnumerable`** on the list-field path. The Plan A code change that
+introduced the error was **reverted** for the `Query` root; the streaming goal is now
+met on the `Subscription` root instead, where `SubscriptionExecutionStrategy` iterates
+the `IAsyncEnumerable<OrderDto>` natively.
 
 ## 2. Original goal (still valid)
 
@@ -62,7 +97,9 @@ begins iterating. This is acceptable for the current expected order volumes (the
 proto / contracts are designed around per-phone lookups, not per-customer bulk
 exports).
 
-**Status:** active.
+**Status:** active (default behaviour for the `Query` root; the in-memory
+`List<OrderDto>` stays there for the list-field path that
+`SerialExecutionStrategy` enforces).
 
 ### Option B — pre-stream into a shared collection that's still `IEnumerable`
 
@@ -103,6 +140,8 @@ the executor to be wired with `SubscriptionExecutionStrategy` in
 `Program.cs` / DI. This is the right long-term path if true streaming of the
 resolver is a hard requirement.
 
+**Status:** ✅ **Implemented** (see §1, §6, §7 for the diff and the smoke test).
+
 ### Option D — drop GraphQL.NET for this adapter and parse the query ourselves
 
 The other end of the spectrum: bypass `IDocumentExecuter` entirely, walk the
@@ -123,13 +162,14 @@ touching GraphQL.NET internals.
 If the goal is **eliminating the in-memory `List<OrderDto>` for large order
 sets**:
 
-1. **Short term (Option A, current code):** ship as-is. The streaming wins on
+1. ✅ **Short term (Option A, current code):** ship as-is. The streaming wins on
    the wire (`IServerStreamWriter<QueryResponse>`) are real, and per-phone order
-   sets are bounded in the current data model.
-2. **Medium term (Option C):** add a subscription path. This is the only
+   sets are bounded in the current data model. *(Active: the `Query` root still
+   returns `List<OrderDto>`.)*
+2. ✅ **Medium term (Option C):** add a subscription path. This is the only
    GraphQL.NET 8 native way to use `IAsyncEnumerable<T>` resolvers. It is the
    right architectural fit if the order source ever starts emitting
-   firehose-style result sets.
+   firehose-style result sets. *(Implemented: see §6 / §7.)*
 3. **Long term (Option D):** if subscriptions prove cumbersome (they require a
    different transport semantics on the gRPC side), drop the in-process
    `IDocumentExecuter` for this adapter and use the selection-set walker over
@@ -140,20 +180,33 @@ sets**:
 
 | File | Change |
 |---|---|
-| [`AdapterFacade/Services/OrderAdapter.cs`](AdapterFacade/Services/OrderAdapter.cs) | **No functional change from the baseline.** The two resolvers still materialize into `List<OrderDto>` and return it. A short code comment in each resolver points at this plan file. No helpers added; no `using` lines added. |
+| [`AdapterFacade/Services/OrderAdapter.cs`](AdapterFacade/Services/OrderAdapter.cs) | **Plan C implementation.** Added `using GraphQL.Resolvers;` for `FuncFieldResolver<>` / `SourceStreamResolver<>`. Added `OrderSubscription : ObjectGraphType` with two subscription fields (`searhByPhoneNumber(phone_number: String!): Order`, `findByOrderId(order_id: String!): Order`) — each wired with a trivial `FuncFieldResolver<OrderDto?>` (returns `default!`, never called by `SubscriptionExecutionStrategy`) and a `SourceStreamResolver<OrderDto>` whose delegate returns an `IObservable<OrderDto>` produced by the new `MapToDtosAsync` helper, bridged through the in-repo `file static class AsyncEnumerableObservable` (no `System.Reactive` dependency). The `OrderAdapterSchema` ctor now accepts a `Subscription` and assigns it. The `Query` root still materializes `List<OrderDto>` (Plan A behaviour, unchanged). The two `OrderQuery` resolvers and the `[GraphQL]`-decorated DTOs are unchanged. |
+| [`AdapterFacade/Program.cs`](AdapterFacade/Program.cs) | **Plan C implementation.** Added `using GraphQL.Validation;` (for `DocumentValidator`) and `using GraphQLParser.AST;` (for `OperationType`). Added `using GraphQL.DI;` for `IConfigureExecution`. Registered `SubscriptionExecutionStrategy` as a singleton and wired a singleton `IDocumentExecuter` with a `DefaultExecutionStrategySelector` whose `ExecutionStrategyRegistration[]` maps `Query` / `Mutation` → `SerialExecutionStrategy` and `Subscription` → the new `SubscriptionExecutionStrategy`. The `DocumentExecuter` is constructed via the 4-arg public ctor `(IDocumentBuilder, IDocumentValidator, IExecutionStrategySelector, IEnumerable<IConfigureExecution>)` with `GraphQLDocumentBuilder` + `DocumentValidator` defaults. |
 | All other files | No change. |
 
 ## 7. Verification
 
-`dotnet build AdapterFacade/AdapterFacade.csproj` → **Build succeeded. 0 Warning(s), 0 Error(s).**
+- `dotnet build WebApplication2.sln` → **Build succeeded. 0 Warning(s), 0 Error(s).**
+- Throwaway probe (`AdapterFacade/bin/apiprobe/`, since deleted) constructed
+  `OrderAdapter` with stub `IOrderClient` / `IDocumentExecuter` implementations,
+  called `adapter.Schema().Print()`, and asserted that the SDL contains
+  `type Subscription` with both `searhByPhoneNumber(phone_number: String!): Order`
+  and `findByOrderId(order_id: String!): Order`. The probe printed the expected
+  `type Subscription { ... }` block.
+- The original Plan A runtime error (`SetArrayItemNodesAsync` → "Expected an
+  IEnumerable list though did not find one") is no longer reachable on the
+  `Subscription` root, because `SubscriptionExecutionStrategy` projects each
+  `IAsyncEnumerable<OrderDto>` item through the selection set without forcing
+  it into a synchronous `IEnumerable`.
 
-The runtime error from the streaming attempt is fixed by the revert in step 6.
+## 8. Resolved
 
-## 8. Open question for the user
-
-Which of options A / C / D above should I implement? Option A is "ship the
-reverted code as-is". Option C adds GraphQL subscriptions and is the cleanest
-fit for `IAsyncEnumerable<OrderDto>`. Option D replaces the in-process
-`IDocumentExecuter` with a hand-rolled selection-set walker over the gRPC
-stream. My recommendation is **C** if the order source will ever return more
-than ~10k rows per lookup, otherwise **A**.
+Plan C is implemented (see §1, §6, §7). The `Subscription` root now exposes
+`IAsyncEnumerable<OrderDto>` resolvers via `SourceStreamResolver` and
+`MapToDtosAsync`, with the executor wired to `SubscriptionExecutionStrategy`
+through `DefaultExecutionStrategySelector`. The historical A / C / D question
+is closed: **C chosen and shipped**; the gRPC carrier contract is preserved;
+the `Query` root continues to return `List<OrderDto>` (Plan A) so the
+serialization layer is unchanged. Option D (selection-set walker over the raw
+gRPC stream) remains the documented long-term escape hatch if subscription
+transport ever proves insufficient.
