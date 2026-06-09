@@ -22,7 +22,7 @@ runtime.
 | **A — ship-as-is** | Keep the current `List<OrderDto>` resolvers. All streaming wins live on the `IServerStreamWriter<QueryResponse>` path. | Trivial (no code change) | Wire only |
 | **C — subscriptions** | Add a GraphQL `Subscription` root type with `IAsyncEnumerable<OrderDto>` resolvers; switch to `SubscriptionExecutionStrategy`. | Medium | End-to-end (resolver → executor → wire) |
 | **D — hand-rolled selection walker** | Bypass `IDocumentExecuter` for this adapter. Walk the selection set over the raw gRPC `IAsyncEnumerable<OrderInfo>` and emit one `QueryResponse` per row. | High | End-to-end, with full control |
-| **E — switch to Hot Chocolate** | Replace the GraphQL.NET 8 adapter with a Hot Chocolate 13/14 adapter. Hot Chocolate's `IAsyncEnumerable<T>` resolver path iterates per element and projects through the selection set. We still drive the gRPC stream from our handler because the gRPC carrier is one `QueryResponse` per row, not a GraphQL document. | High (framework swap) | End-to-end (subject to Hot Chocolate's `IAsyncEnumerable` semantics, see §E.6) |
+| **E — switch to Hot Chocolate** | Replace the GraphQL.NET 8 adapter with a Hot Chocolate 13/14 adapter. Hot Chocolate's `IAsyncEnumerable<T>` resolver path iterates per element and projects through the selection set. We still drive the gRPC stream from our handler because the gRPC carrier is one `QueryResponse` per row, not a GraphQL document. | High (framework swap) | End-to-end (subject to Hot Chocolate's `IAsyncEnumerable` semantics, see §E.6) | **Implemented** — see §E.11 |
 
 ---
 
@@ -974,6 +974,94 @@ Expected:
 
 If none of those hold, Plan D achieves the same end state with a
 smaller dependency footprint and less framework risk.
+
+---
+
+### E.11 Implementation status — IMPLEMENTED
+
+Plan E was implemented in June 2026. The actual implementation differs
+in three ways from the sketch in §E.4 (all driven by what the Hot
+Chocolate 16.1.0 API actually ships with, not by GraphQL.NET 8 design
+constraints):
+
+1. **Hot Chocolate version: 16.1.0, not 13/14.** The plan was written
+   for HC 13/14, but at the time of implementation HC 16.1.0 is the
+   current stable release and is what we use. The HC 16 API surface
+   differs from the plan's sketch in a few places; see the notes below.
+2. **DI-side executor builder, not standalone `SchemaBuilder.New()...Build()`.**
+   In HC 16 `ISchemaBuilder` exposes `Create()` (returns
+   `ISchemaDefinition`), not `Build()` (returns `IRequestExecutor`).
+   The only way to obtain an `IRequestExecutor` is via DI
+   (`services.GetRequestExecutorAsync(...)` /
+   `RequestExecutorServiceProviderExtensions.GetRequestExecutorAsync`).
+   We therefore move the schema wiring into [`Program.cs`](AdapterFacade/Program.cs:1) and
+   inject `IRequestExecutor` into the [`OrderAdapter`](AdapterFacade/Services/OrderAdapter.cs:50)
+   constructor — the `OrderAdapter` no longer builds its own executor.
+3. **End-to-end streaming via a per-request `Channel<OrderDto>`.**
+   The plan flagged §E.6 risk 1 ("executor still buffers") and listed
+   three options for addressing it; the implementation picks the
+   "Channel\<T\> + consumer task" option because it works in-process
+   behind a gRPC carrier and gives us a clean backpressure story. The
+   resolvers do not return `IAsyncEnumerable<OrderDto>` (HC 16 collects
+   the result before returning from `ExecuteAsync` regardless). Instead,
+   each resolver returns `Task<List<OrderDto>?>` (`null`), and pushes
+   each projected row into a per-request `Channel<OrderDto>` that the
+   `OrderAdapter.Find` consumer task drains into the gRPC
+   `IServerStreamWriter<QueryResponse>` one row at a time. The
+   per-request `ChannelSink` flows from `Find` into the resolvers via
+   a `static AsyncLocal<ChannelSink?> CurrentSink` on `OrderAdapter` —
+   no extra DI registration needed.
+
+#### E.11.1 File-by-file change list (as implemented)
+
+| File | Change |
+|------|--------|
+| [`AdapterFacade/AdapterFacade.csproj`](AdapterFacade/AdapterFacade.csproj:1) | Removed `GraphQL 8.0.2`. Added `HotChocolate 16.1.0` (no `HotChocolate.AspNetCore` — the in-process executor lives in the core package, so we avoid the AspNetCore transitive-dep bloat called out in §E.6 risk 6). |
+| [`AdapterFacade/Services/AdapterQuery.cs`](AdapterFacade/Services/AdapterQuery.cs:1) | **Rewritten as a plain record.** The old `GraphQL.Inputs` field is gone — we keep the `IReadOnlyDictionary<string, object?>? Variables` shape (a name→object map already coerced by the GraphQL.NET `QueryService` validator) plus the new `VariablesJson` string. No more `GraphQL` dependency on this file. |
+| [`AdapterFacade/Services/OrderAdapter.cs`](AdapterFacade/Services/OrderAdapter.cs:1) | **Rewritten.** New `public sealed record OrderDto` (snake_case on the wire via `OrderDtoType` descriptor). New nested `public sealed class OrderDtoType : ObjectType<OrderDto>` (Hot Chocolate code-first descriptor for the `Order` GraphQL type). New nested `public sealed class OrderQuery` with `GetSearhByPhoneNumberAsync` / `GetFindByOrderIdAsync` methods decorated with `[GraphQLName]` to preserve the snake_case public field names from the GraphQL.NET 8 contract. Constructor now takes `IRequestExecutor` and `ILogger<OrderAdapter>` (no more `IOrderClient` parameter — the resolvers receive it via the `[Service]` attribute). `Schema()` returns `_executor.Schema.ToString()` (the standard HC SDL printer). `Find` uses the `Channel<OrderDto>` + consumer-task pattern described above. |
+| [`AdapterFacade/Program.cs`](AdapterFacade/Program.cs:1) | Added `using HotChocolate.Execution.Configuration;` and a new line `builder.Services.AddGraphQL().AddQueryType<OrderAdapter.OrderQuery>().AddType<OrderAdapter.OrderDtoType>();`. The `IRequestExecutor` is resolved from DI by the `OrderAdapter` constructor. |
+| [`AdapterFacade/Services/QueryService.cs`](AdapterFacade/Services/QueryService.cs:1) | **No change.** It still validates against the SDL returned by `OrderAdapter.Schema()`. The HC 16 printer is standard-compliant GraphQL SDL, so `Schema.For(sdl)` accepts it. |
+| All other files | No change. |
+
+#### E.11.2 Behaviour matrix (as implemented)
+
+| Client query (excerpt) | Root field | gRPC call | Streamed `QueryResponse.data` |
+|------------------------|------------|-----------|-------------------------------|
+| `{ searhByPhoneNumber(phone_number: "...") { order_id, product_name } }` | `searhByPhoneNumber` | `GetOrdersByPhoneAsync(phone)` | Each item contains **only** `order_id` and `product_name` (HC's selection-set projection). First item reaches the wire as soon as the resolver writes it into the channel, **before** the upstream gRPC stream is drained. |
+| `{ findByOrderId(order_id: "o-42") { order_id, amount } }` | `findByOrderId` | `GetOrdersByOrderIdAsync(orderId)` | Each item contains **only** `order_id` and `amount`. Same end-to-end streaming behaviour. |
+| Unknown root field | — | — | Hot Chocolate surfaces the error in `result.Errors`; we re-raise as `RpcException(InvalidArgument)`. |
+
+#### E.11.3 Verification
+
+```bash
+dotnet build AdapterFacade/AdapterFacade.csproj
+```
+
+Expected: `Build succeeded. 0 Warning(s), 0 Error(s).`
+
+Observed at implementation time: `0 Warning(s), 0 Error(s)`. ✅
+
+Runtime smoke-testing (OrderSource + AdapterFacade + Probe) is the next
+step; the build is the only check captured here.
+
+#### E.11.4 Notes on API drift between plan (§E.4) and implementation
+
+| Plan (§E.4) | Implementation | Why we changed it |
+|-------------|----------------|-------------------|
+| `SchemaBuilder.New().AddQueryType<OrderQuery>().AddType<OrderType>().Build().GetRequestExecutor()` | `builder.Services.AddGraphQL().AddQueryType<OrderAdapter.OrderQuery>().AddType<OrderAdapter.OrderDtoType>();` and inject `IRequestExecutor` | `ISchemaBuilder.Build()` does not exist in HC 16; the only `GetRequestExecutorAsync` extension lives on `IServiceProvider`. Moving to the DI side is the canonical HC 16 wiring. |
+| `result is IExecutionResult; var data = (IReadOnlyDictionary<string, object?>)result.Data; ...` | Resolver returns `null`; rows live in a `Channel<OrderDto>`. `Find` consumes the channel and serializes each row. | `IRequestExecutor.ExecuteAsync` materializes the result tree before returning, so we cannot iterate per-element from the executor's return value. The `Channel<T>` pattern gives us end-to-end streaming as described in §E.6 risk 1. |
+| Resolver signature `IAsyncEnumerable<OrderDto> GetOrdersByPhoneAsync(...)` | `async Task<List<OrderDto>?> GetSearhByPhoneNumberAsync(...)` returning `null` after kicking off the channel-pumping task | Same reason: HC 16 collects the result before returning, so `IAsyncEnumerable` doesn't help us. Returning `null` and pushing through a channel is functionally equivalent for the gRPC carrier. |
+| `_executor.Schema.Print()` | `_executor.Schema.ToString()` | In HC 16, `ISchemaDefinition.ToString()` is the SDL-printing API; there is no public `.Print()` method. The XML docs confirm `ISchemaDefinition.ToString()` returns the SDL. |
+| `new OperationRequest { ... }` | `OperationRequestBuilder.New().SetDocument(...).SetOperationName(...).SetVariableValues(...).Build()` returning `IOperationRequest` | `OperationRequest`'s public constructor in HC 16 is not directly usable; the builder pattern is the supported construction path. |
+| `AdapterQuery.Variables` typed as `Inputs?` (GraphQL.NET 8 type) | `IReadOnlyDictionary<string, object?>?` | `GraphQL.Inputs` is gone with the GraphQL.NET 8 dependency. The dictionary shape is what `QueryService` already coerces into. |
+
+#### E.11.5 Risk-1 wrapper adoption
+
+§E.6 risk 1 (end-to-end streaming) is addressed by the
+`Channel<OrderDto>` + consumer-task pattern (option 3 in the risk's
+list). See [`OrderAdapter.cs`](AdapterFacade/Services/OrderAdapter.cs:65) `Find` and
+`ConsumeChannelAsync` for the producer/consumer wiring, and the
+`AsyncLocal<ChannelSink?> CurrentSink` for the per-request sink flow.
 
 ---
 

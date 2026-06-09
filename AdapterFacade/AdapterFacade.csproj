@@ -10,8 +10,8 @@
 
     <ItemGroup>
         <PackageReference Include="Grpc.AspNetCore" Version="2.80.0" />
-        <PackageReference Include="GraphQL" Version="8.0.2" />
         <PackageReference Include="Grpc.AspNetCore.Server.Reflection" Version="2.80.0" />
+        <PackageReference Include="HotChocolate" Version="16.1.0" />
     </ItemGroup>
 
     <ItemGroup>
