@@ -47,6 +47,7 @@ public class OrderInfoService(ILogger<OrderInfoService> logger) : OrderService.O
                 order.PhoneNumber);
 
             await responseStream.WriteAsync(order);
+            await Task.Delay(TimeSpan.FromSeconds(3), context.CancellationToken);
         }
     }
 

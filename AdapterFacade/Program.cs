@@ -17,10 +17,17 @@ builder.Services.AddOrderClient(builder.Configuration, "OrderClient");
 // Register the Hot Chocolate schema for OrderAdapter. The IRequestExecutor
 // built here is what OrderAdapter consumes via DI — see
 // plans/order-adapter-resolver-streaming-options.md §E.4.3.
+// builder.Services
+//     .AddGraphQL()
+//     .AddQueryType<OrderAdapter.OrderQuery>()
+//     .AddType<OrderAdapter.OrderDtoType>();
 builder.Services
     .AddGraphQL()
-    .AddQueryType<OrderAdapter.OrderQuery>()
-    .AddType<OrderAdapter.OrderDtoType>();
+    .ModifyOptions(options =>
+    {
+        options.EnableStream = true;
+    })
+    .AddQueryType<Query>();
 
 // Hot Chocolate 16 registers IRequestExecutorProvider in DI but does NOT
 // register IRequestExecutor directly. OrderAdapter's constructor depends
@@ -35,7 +42,7 @@ builder.Services.AddSingleton<IRequestExecutor>(sp =>
         .GetResult());
 
 // builder.Services.AddKeyedScoped<IAdapter, AbonentAdapter>(AbonentAdapter.SourceId);
-builder.Services.AddKeyedScoped<IAdapter, OrderAdapter>(OrderAdapter.SourceId);
+builder.Services.AddKeyedScoped<IAdapter, OrderAdapterHandMade>(OrderAdapterHandMade.SourceId);
 
 var app = builder.Build();
 

@@ -46,7 +46,7 @@ namespace AdapterFacade.Services;
 /// record.
 /// </para>
 /// </summary>
-public sealed class OrderAdapter : IAdapter
+public sealed class OrderAdapterAI : IAdapter
 {
     public static string SourceId { get; } = "order_adapter_source_id";
 
@@ -69,11 +69,11 @@ public sealed class OrderAdapter : IAdapter
     /// </summary>
     private static readonly AsyncLocal<string?> CurrentQuery = new();
 
-    private readonly ILogger<OrderAdapter> _logger;
+    private readonly ILogger<OrderAdapterAI> _logger;
     private readonly IRequestExecutor _executor;
     private readonly string _sdl;
 
-    public OrderAdapter(IRequestExecutor executor, ILogger<OrderAdapter> logger)
+    public OrderAdapterAI(IRequestExecutor executor, ILogger<OrderAdapterAI> logger)
     {
         ArgumentNullException.ThrowIfNull(executor);
         ArgumentNullException.ThrowIfNull(logger);
@@ -493,7 +493,7 @@ public sealed class OrderAdapter : IAdapter
             // OrderAdapter.Find handler built. We hand the raw query
             // text in via an AsyncLocal alongside the ChannelSink.
             _ = context; // currently unused; reserved for future use.
-            var queryText = OrderAdapter.CurrentQuery.Value;
+            var queryText = OrderAdapterAI.CurrentQuery.Value;
             if (string.IsNullOrWhiteSpace(queryText))
             {
                 // No query available — return an empty selection (the

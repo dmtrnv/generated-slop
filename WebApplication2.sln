@@ -12,7 +12,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Protos", "Protos\Protos.csp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderClient", "OrderClient\OrderClient.csproj", "{0BAD5274-F6A6-4358-AA47-64CD11D6062C}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{F2E76885-9A1F-419B-9E64-F3FDFA881B02}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "plans", "plans", "{F2E76885-9A1F-419B-9E64-F3FDFA881B02}"
 	ProjectSection(SolutionItems) = preProject
 		plans\order-adapter-refactor.md = plans\order-adapter-refactor.md
 		plans\order-adapter-refactor-schemafirst.md = plans\order-adapter-refactor-schemafirst.md
